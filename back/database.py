@@ -5,10 +5,11 @@ import os
 from dotenv import load_dotenv
 
 
+load_dotenv()
 
 SQLALCHEMY_DATABASE_URL = os.getenv('DATABASE_URL')
  
-load_dotenv()
+
 
 # создание движка
 engine = create_engine(
