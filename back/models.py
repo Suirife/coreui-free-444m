@@ -13,7 +13,7 @@ class User(Base):
     failed_logins = Column(Integer, default=0)
     locked_until = Column(Float, default=0)
     wallets = relationship("Wallet", back_populates="user")
-    token = Column(String)
+    access_token = Column(String)
 
 
 class Wallet(Base):

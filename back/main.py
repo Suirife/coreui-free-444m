@@ -7,9 +7,16 @@ import jwt
 from typing import Annotated
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
+import os
+from dotenv import load_dotenv
+from typing import Optional
+from fastapi.security import (
+    APIKeyHeader,
+)
+
+load_dotenv()
 
 models.Base.metadata.create_all(bind=engine)
-
 
 app = FastAPI()
 
@@ -25,17 +32,11 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+api_key_header = APIKeyHeader(name="Token", auto_error=False)
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)):
+async def get_user_by_token(token: str):
+    db = next(get_db())
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -54,62 +55,23 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Se
         raise credentials_exception
     return user
 
-async def get_current_active_user(
-    current_user: Annotated[schemas.User, Depends(get_current_user)],
-):
-    if current_user.is_active == False:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
 
 
-def authenticate_user(db, username: str, password: str):
-    user = crud.get_user_by_username(db, username)
-    if not user or not crud.verify_password(password, user.hashed_password):
-        crud.login_attempts(db, user)
-        return False
-    return user
+async def user_auth(api_key: Optional[APIKeyHeader] = Depends(api_key_header)):
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token not found",
+        )
 
-@app.post("/login", response_model=schemas.User)
-def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
-    crud.user_unlocked(db, user)
-    current_user = get_current_active_user(user)
-    user = authenticate_user(db, current_user.username, current_user.password)
+    user = await get_user_by_token(api_key)
+
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-            )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
-    return schemas.Token(access_token=access_token, token_type="bearer")
-
-
-@app.post("/registration", response_model=schemas.User)
-def registration(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    if not user.username:
-        raise HTTPException(status_code=400, detail="Username is required")
-    if not user.email:
-        raise HTTPException(status_code=400, detail="Email is required")
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    registered_user = crud.registration(db=db, user=user)
-    return registered_user
-
-@app.post("/wallet", response_model=schemas.WalletCreate)
-def create_wallet(wallet: schemas.WalletCreate, db: Session = Depends(get_db)):
-    user = Depends(get_current_user)
-    return crud.create_wallet(db=db, wallet=wallet, user=user)
-
-@app.get("/users/me/", response_model=schemas.User)
-async def read_users_me(
-    current_user: Annotated[schemas.User, Depends(get_current_active_user)],
-):
-    return current_user
-
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+    return user
 
 
 def verify_token(token: str, SECRET_KEY):
@@ -120,6 +82,83 @@ def verify_token(token: str, SECRET_KEY):
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+    
+
+async def get_current_active_user(
+    current_user: Annotated[schemas.User, Depends(user_auth)],
+):
+    if current_user.is_active == False:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+# Отредактировано
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# Отредактировано
+def authenticate_user(db, username: str, password: str):
+    user = crud.get_user_by_username(db, username)
+    if not user or not crud.verify_password(password, user.hashed_password):
+        crud.login_attempts(db, user)
+        return False
+    return user
+
+# Отредактировано
+@app.post("/login", response_model=schemas.UserLogin)
+def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
+    crud.user_unlocked(db, user)
+    current_user = crud.get_active_user(db, user.username)
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User is not active")
+    user = authenticate_user(db, user.username, user.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+            )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    crud.update_token(db, user, access_token)
+    return schemas.Token(access_token=access_token, token_type="bearer")
+
+# Отредактировано
+@app.post("/registration", response_model=schemas.UserBase)
+def registration(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    if not user.username:
+        raise HTTPException(status_code=400, detail="Username is required")
+    if not user.email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    db_user = crud.get_user_by_username(db, username=user.username)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    registered_user = crud.registration(db=db, user=user)
+    return registered_user
+
+# Отредактировано
+@app.post("/wallet", response_model=schemas.WalletCreate)
+def create_wallet(wallet: schemas.WalletCreate, db: Session = Depends(get_db)):
+    user = Depends(get_current_active_user)
+    return crud.create_wallet(db=db, wallet=wallet, user=user)
+
+@app.get("/users/me/", response_model=schemas.User)
+async def read_users_me(
+    current_user: Annotated[schemas.User, Depends(get_current_active_user)],
+):
+    return current_user
+
 
 @app.post("/forgot_password")
 async def send_token(email: str, db: Session = Depends(get_db)):

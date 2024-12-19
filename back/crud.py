@@ -4,6 +4,9 @@ import models, schemas
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
 def registration(db: Session, user: schemas.UserCreate):
     _hashed_password = get_password_hash(user.password)
     db_user = models.User(
@@ -84,8 +87,6 @@ def create_wallet(db: Session, wallet: schemas.WalletCreate, user:models.User):
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
-def get_password_hash(password):
-    return pwd_context.hash(password)
 
 def login_attempts(db: Session, db_user: models.User):
     if db_user.failed_logins < 5:
@@ -102,7 +103,17 @@ def user_unlocked(db: Session, db_user: models.User):
         db_user.failed_logins = 0
         db_user.locked_until = None
         db.commit()
+    
+def get_active_user(db: Session, username: str):
+    return db.query(models.User).filter(models.User.username == username, models.User.is_active == True).first()
+
 def reset_password(db: Session, db_user: models.User, password: str):
     db_user.hashed_password = get_password_hash(password)
     db.commit()
 
+def get_user_by_token(db: Session, token: str):
+    return db.query(models.User).filter(models.User.token == token, models.User.is_active == True).first()
+
+def update_token(db: Session, db_user: models.User, token: str):
+    db_user.access_token = token
+    db.commit()
