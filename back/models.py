@@ -1,5 +1,5 @@
 from database import Base
-from sqlalchemy import Integer, String, Column, Boolean, ForeignKey, Float, DATE
+from sqlalchemy import Integer, String, Column, Boolean, ForeignKey, Float, DATE, DateTime, Interval
 from sqlalchemy.orm import relationship
 
 class User(Base):
@@ -11,9 +11,10 @@ class User(Base):
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
     failed_logins = Column(Integer, default=0)
-    locked_until = Column(Float, default=0)
+    locked_until = Column(DateTime, default=None)
     wallets = relationship("Wallet", back_populates="user")
     access_token = Column(String)
+    restore_token = Column(String, default=None)
 
 
 class Wallet(Base):
