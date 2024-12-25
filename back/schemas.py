@@ -24,11 +24,14 @@ class UserLogin(BaseModel):
     password: str
 
 class Token(BaseModel):
+    password: str
+    username: str
     access_token: str
     token_type: str
 
-class UserResetPassword(Token):
-    password: str
+class UserResetPassword(BaseModel):
+    restore_token: str
+    reset_password: str
 
 class TokenData(BaseModel):
     username: str | None = None

@@ -34,9 +34,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 api_key_header = APIKeyHeader(name="Token", auto_error=False)
 
-async def get_user_by_token(token: str):
+async def get_user_by_token(token: Annotated[str, Depends(oauth2_scheme)]):
     db = next(get_db())
-
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -84,13 +83,6 @@ def verify_token(token: str, SECRET_KEY):
         raise HTTPException(status_code=401, detail="Invalid token")
     
 
-async def get_current_active_user(
-    current_user: Annotated[schemas.User, Depends(user_auth)],
-):
-    if current_user.is_active == False:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
-
 # Отредактировано
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -103,33 +95,35 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return encoded_jwt
 
 # Отредактировано
-def authenticate_user(db, username: str, password: str):
+def authenticate_user(db: Session, username: str, password: str):
     user = crud.get_user_by_username(db, username)
-    if not user or not crud.verify_password(password, user.hashed_password):
+    if not user:
+        return None
+    if not crud.verify_password(password, user.hashed_password):
         crud.login_attempts(db, user)
-        return False
+        return None
     return user
 
 # Отредактировано
 @app.post("/login", response_model=schemas.UserLogin)
-def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
-    crud.user_unlocked(db, user)
-    current_user = crud.get_active_user(db, user.username)
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User is not active")
-    user = authenticate_user(db, user.username, user.password)
+def login(user1: schemas.UserLogin, db: Session = Depends(get_db)):
+    crud.user_unlocked(db, user1)
+    user = authenticate_user(db, user1.username, user1.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
             )
+    current_user = crud.get_active_user(db, user.username)
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User is not active")
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     crud.update_token(db, user, access_token)
-    return schemas.Token(access_token=access_token, token_type="bearer")
+    return schemas.Token(username=user.username, password=current_user.hashed_password, access_token=access_token, token_type="bearer")
 
 # Отредактировано
 @app.post("/registration", response_model=schemas.UserBase)
@@ -150,55 +144,50 @@ def registration(user: schemas.UserCreate, db: Session = Depends(get_db)):
 # Отредактировано
 @app.post("/wallet", response_model=schemas.WalletCreate)
 def create_wallet(wallet: schemas.WalletCreate, db: Session = Depends(get_db)):
-    user = Depends(get_current_active_user)
+    user = Depends(user_auth)
     return crud.create_wallet(db=db, wallet=wallet, user=user)
 
 @app.get("/users/me/", response_model=schemas.User)
-async def read_users_me(
-    current_user: Annotated[schemas.User, Depends(get_current_active_user)],
-):
+async def read_users_me(current_user: Annotated[schemas.User, Depends(user_auth)]):
     return current_user
 
 
 @app.post("/forgot_password")
-async def send_token(email: str, db: Session = Depends(get_db)):
+async def forgot_password(email: str, db: Session = Depends(get_db)):
     user = crud.get_user_by_email(db, email=email)
     if not user:
-        raise HTTPException(status_code=404, detail="Incorrect email address") 
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        raise HTTPException(status_code=404, detail="Incorrect email address")
+    restore_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    restore_token = create_access_token(
+        data={"sub": user.username}, expires_delta=restore_token_expires
     )
-    token = schemas.Token(access_token=access_token, token_type="bearer")
-    return {"token": token}
+    crud.update_restore_token(db, user, restore_token) 
+    return {"message": "Email sent successfully"}
 
-@app.post("/reset_password", response_model=schemas.UserResetPassword)
-async def reset_password(password_reset: schemas.UserResetPassword, db: Session = Depends(get_db)):
-    payload = verify_token(password_reset.access_token, SECRET_KEY)
-    user = crud.get_user_by_username(db, username=payload["sub"])
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    crud.reset_password(db, user, password_reset.password)
+@app.post("/reset_password")
+async def reset_password(UserResetPassword: schemas.UserResetPassword, db: Session = Depends(get_db)):
+    user = crud.get_user_by_restore_token(db, UserResetPassword.restore_token)
+    crud.reset_password(db, user, UserResetPassword.reset_password)
     return {"message": "Password reset successfully"}
 
 @app.get("/incomes_by_month", response_model=schemas.IncomesByMonth)
 async def get_incomes_month(wallet_id: schemas.IncomesByMonth, month: schemas.IncomesByMonth, db: Session = Depends(get_db)):
-    user = Depends(get_current_active_user)
+    user = Depends(user_auth)
     return crud.incomes_by_wallet_id_and_month(db, wallet_id, month, user)
 
 @app.get("/expenses_by_month", response_model=schemas.ExpensesByMonth)
 async def get_expenses_month(wallet_id: schemas.ExpensesByMonth, month: schemas.ExpensesByMonth, db: Session = Depends(get_db)):
-    user = Depends(get_current_active_user)
+    user = Depends(user_auth)
     return crud.expenses_by_wallet_id_and_month(db, wallet_id, month, user)
 
 @app.get("/incomes_by_year", response_model=schemas.IncomesByYear)
 async def get_incomes_year(wallet_id: schemas.IncomesByYear, year: schemas.IncomesByYear, db: Session = Depends(get_db)):
-    user = Depends(get_current_active_user)
+    user = Depends(user_auth)
     return crud.incomes_by_wallet_id_and_year(db, wallet_id, year, user)
 
 @app.get("/expenses_by_year", response_model=schemas.ExpensesByYear)
 async def get_expenses_year(wallet_id: schemas.ExpensesByYear, year: schemas.ExpensesByYear, db: Session = Depends(get_db)):
-    user = Depends(get_current_active_user)
+    user = Depends(user_auth)
     return crud.expenses_by_wallet_id_and_year(db, wallet_id, year, user)
 
 #@app.get("/incomes_by_category", response_model=schemas.IncomesByCategory)
