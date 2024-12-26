@@ -129,3 +129,6 @@ def get_user_by_restore_token(db: Session, token: str):
 def update_restore_token(db: Session, db_user: models.User, restore_token: str):
     db_user.restore_token = restore_token
     db.commit()
+
+def get_all_users(db: Session):
+    return db.query(models.User).all()
