@@ -12,7 +12,7 @@ import CIcon from '@coreui/icons-react'
 import { cilMagnifyingGlass } from '@coreui/icons'
 
 const UserTable = () => {
-  const [users, setUsers] = useState([
+  const [users, setUsers] = useState<{
     id: string, 
     username: string,
     email: string,
@@ -21,7 +21,7 @@ const UserTable = () => {
     failed_logins: integer,
     access_token: string,
     restore_token: string
-  ]);
+  }[]>([]);
 
 
 useEffect(() => {
