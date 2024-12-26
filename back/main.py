@@ -105,7 +105,7 @@ def authenticate_user(db: Session, username: str, password: str):
     return user
 
 # Отредактировано
-@app.post("/login", response_model=schemas.UserLogin)
+@app.post("/login", response_model=schemas.Token)
 def login(user1: schemas.UserLogin, db: Session = Depends(get_db)):
     crud.user_unlocked(db, user1)
     user = authenticate_user(db, user1.username, user1.password)
@@ -119,14 +119,14 @@ def login(user1: schemas.UserLogin, db: Session = Depends(get_db)):
     if not current_user:
         raise HTTPException(status_code=404, detail="User is not active")
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
+    access_token1 = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    crud.update_token(db, user, access_token)
-    return schemas.Token(username=user.username, password=current_user.hashed_password, access_token=access_token, token_type="bearer")
-
+    crud.update_token(db, user, access_token1)
+    return schemas.Token(access_token=access_token1, token_type="bearer")
+     
 # Отредактировано
-@app.post("/registration", response_model=schemas.UserBase)
+@app.post("/registration")
 def registration(user: schemas.UserCreate, db: Session = Depends(get_db)):
     if not user.username:
         raise HTTPException(status_code=400, detail="Username is required")
@@ -139,7 +139,7 @@ def registration(user: schemas.UserCreate, db: Session = Depends(get_db)):
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
     registered_user = crud.registration(db=db, user=user)
-    return registered_user
+    return {"User successfully registered!"}
 
 # Отредактировано
 @app.post("/wallet", response_model=schemas.WalletCreate)
