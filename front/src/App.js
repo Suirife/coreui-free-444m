@@ -12,7 +12,7 @@ const DefaultLayout = React.lazy(() => import('./layout/DefaultLayout'));
 const Login = React.lazy(() => import('./views/pages/login/Login'));
 const Register = React.lazy(() => import('./views/pages/register/Register'));
 const Page404 = React.lazy(() => import('./views/pages/page404/Page404'));
-const Lists = React.lazy(() => import('./views/pages/Lists/Lists'));
+const Lists = React.lazy(() => import('./views/pages/lists/Lists'));
 const Page500 = React.lazy(() => import('./views/pages/page500/Page500'));
 const ResetPasswordFlow = React.lazy(() => import('./views/pages/resetpasswordflow/ResetPasswordFlow')); // Импортируем новый компонент
 
