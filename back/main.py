@@ -164,6 +164,10 @@ async def forgot_password(email: str, db: Session = Depends(get_db)):
     crud.update_restore_token(db, user, restore_token) 
     return {"message": "Email sent successfully"}
 
+@app.get("/get_all_users")
+async def get_all_users(db: Session = Depends(get_db)):
+    return crud.get_all_users(db)
+
 @app.post("/reset_password")
 async def reset_password(UserResetPassword: schemas.UserResetPassword, db: Session = Depends(get_db)):
     user = crud.get_user_by_restore_token(db, UserResetPassword.restore_token)
