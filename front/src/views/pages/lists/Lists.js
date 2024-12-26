@@ -10,9 +10,19 @@ import {
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
 import { cilMagnifyingGlass } from '@coreui/icons'
+import { BASE_DOMAIN } from 'config';
 
-function UserTable() {
-  const [users, setUsers] = useState([]);
+const UserTable = () => {
+  const [users, setUsers] = useState([
+    id: string, 
+    username: string,
+    email: string,
+    hashed_password: string,
+    is_active: boolean,
+    failed_logins: integer,
+    access_token: string,
+    restore_token: string
+  ]);
 
 
 useEffect(() => {
@@ -24,6 +34,7 @@ useEffect(() => {
 }, []);
 
 return (
+  <div style={{ padding: '20px', border: '1px solid #ccc' }}>
   <table>
     <thead>
       <tr>
@@ -40,6 +51,7 @@ return (
       ))}
     </tbody>
   </table>
+ </div>
 );
 }
 
