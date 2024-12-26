@@ -17,7 +17,7 @@ function UserTable() {
 
 useEffect(() => {
   // Fetch user data from your database
-  fetch('${BASE_DOMAIN}/UserBase') 
+  fetch('${BASE_DOMAIN}/get_all_users') 
     .then(res => res.json())
     .then(data => setUsers(data))
     .catch(error => console.error('Error fetching users:', error));
