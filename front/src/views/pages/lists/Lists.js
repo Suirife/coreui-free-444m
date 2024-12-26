@@ -10,7 +10,6 @@ import {
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
 import { cilMagnifyingGlass } from '@coreui/icons'
-import { BASE_DOMAIN } from 'config';
 
 const UserTable = () => {
   const [users, setUsers] = useState([
@@ -27,7 +26,7 @@ const UserTable = () => {
 
 useEffect(() => {
   // Fetch user data from your database
-  fetch('${BASE_DOMAIN}/get_all_users') 
+  fetch('http://203.31.40.135:3001/get_all_users') 
     .then(res => res.json())
     .then(data => setUsers(data))
     .catch(error => console.error('Error fetching users:', error));
